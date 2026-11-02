@@ -171,6 +171,33 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 #installRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
 #installHint{font-size:12.5px;color:var(--mute);flex:1;min-width:180px}
 #btnInstall{background:var(--green);color:#04140c;border-color:transparent}
+#dock .share{white-space:nowrap}
+.whead .nm{font-size:19px;font-weight:700;line-height:1.25;margin-top:12px}
+.whead .ad{color:var(--mute);font-size:13px;margin-top:2px}
+.whead .acc{font-size:12.5px;margin-top:6px}
+.whead .acc.good{color:var(--green)} .whead .acc.warn{color:var(--amber)} .whead .acc.bad{color:var(--red)}
+.wchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.wchip{padding:6px 10px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);font-size:13px;font-weight:600}
+.wchip b{display:block;color:var(--mute);font-weight:600;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase}
+.wc{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.wc:last-child{border-bottom:0}
+.wc .l{width:76px;color:var(--mute);font-size:12px;flex:none}
+.wc .v{flex:1;font:600 13px var(--mono);word-break:break-all}
+.wc button{height:32px;padding:0 10px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);font-size:12px;font-weight:600}
+.wx{display:flex;align-items:center;gap:14px;padding:4px 0}
+.wx .big{font-size:36px;font-weight:700;line-height:1;white-space:nowrap}
+.wx .ds{font-size:13px;color:var(--mute);line-height:1.55}
+.wx .ds b{color:var(--ink)}
+.near button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 2px;border-bottom:1px solid var(--line)}
+.near button:last-child{border-bottom:0}
+.near .ic{font-size:21px;width:28px;text-align:center;flex:none}
+.near .tx{flex:1;min-width:0}
+.near .tx b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.near .tx span{font-size:11.5px;color:var(--mute)}
+.near .dist{font:700 12.5px var(--mono);color:var(--green);white-space:nowrap}
+.muted{color:var(--mute);font-size:13px;padding:6px 0}
+.wtop{display:flex;gap:8px;align-items:center}
+.wtop .seg{flex:1}
 @media (max-width:719px){#ctrls{top:calc(70px + var(--st))}}
 </style>
 </head>
@@ -220,7 +247,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 <div id="pincard" class="glass">
   <div class="txt"><div class="lbl" id="pcLbl">Dropped pin</div><div class="co" id="pcCo"></div></div>
   <button class="g" id="pcShare">Share</button>
-  <button id="pcCopy">Copy</button>
+  <button id="pcInfo">Info</button>
   <button class="x" id="pcClr" aria-label="Remove pin"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 
@@ -234,7 +261,8 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 <div id="dock">
   <button id="bLayers" class="sm glass" aria-label="Layers and angle"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg></button>
   <button id="bStates" class="sm glass" aria-label="Jump to a state"><svg class="i" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></button>
-  <button id="bShare" class="share"><svg class="i" viewBox="0 0 24 24"><path d="M12 21.5s-7-6.3-7-11.5a7 7 0 0 1 14 0c0 5.2-7 11.5-7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg>Share my location</button>
+  <button id="bWhere" class="sm glass" aria-label="Where am I?"><svg class="i" viewBox="0 0 24 24"><path d="M12 21.5s-7-6.3-7-11.5a7 7 0 0 1 14 0c0 5.2-7 11.5-7 11.5z"/><path d="M12 9.4v4.2M12 6.7h.01"/></svg></button>
+  <button id="bShare" class="share"><svg class="i" viewBox="0 0 24 24"><path d="M12 21.5s-7-6.3-7-11.5a7 7 0 0 1 14 0c0 5.2-7 11.5-7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg>Share location</button>
 </div>
 <div id="attr"></div>
 <div id="toast"></div>
@@ -298,6 +326,25 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
     </div>
     <button class="pbtn" id="sendReport" hidden></button>
     <p class="fine" id="shHint"></p>
+  </div>
+</section>
+
+<!-- Where am I -->
+<section class="sheet glass" id="shWhere" aria-label="Where am I">
+  <header><h2>Where am I?</h2><button class="x" data-close aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="body">
+    <div class="wtop"><div class="seg" id="wSeg"><button data-src="gps" class="on">My GPS</button><button data-src="pin">Dropped pin</button></div><button class="chip" id="wRefresh">Refresh</button></div>
+    <div class="whead" id="wHead"></div>
+    <div class="wchips" id="wChips"></div>
+    <h3>Coordinates</h3><div id="wCoords"></div>
+    <h3>Weather now</h3><div id="wWx"></div>
+    <h3>Nearest services</h3><div class="near" id="wNear"></div>
+    <div class="sendgrid">
+      <button class="wa" data-wsend="wa">WhatsApp</button>
+      <button data-wsend="copy">Copy all</button>
+      <button data-wsend="native">More…</button>
+    </div>
+    <p class="fine">Addresses and services come from OpenStreetMap and weather from Open-Meteo. In some areas the data is thin or out of date, so treat it as a guide.</p>
   </div>
 </section>
 
@@ -843,17 +890,19 @@ $('#compass').onclick=()=>flyTo(V.lat,V.lng,V.z,{bearing:0,tilt:0,duration:650})
 $('#home').onclick=goHome;
 
 /* ---- sheets ---- */
-const sheets={layers:$('#shLayers'),states:$('#shStates'),share:$('#shShare'),export:$('#shExport')};
+const sheets={layers:$('#shLayers'),states:$('#shStates'),share:$('#shShare'),export:$('#shExport'),where:$('#shWhere')};
 function openSheet(k){
   for(const s in sheets) sheets[s].classList.toggle('open',s===k);
   if(k==='share') onShareOpen(); else onShareClose();
   if(k==='export') refreshExport();
+  if(k==='where') onWhereOpen(); else onWhereClose();
 }
-function closeSheets(fromMap){ if(!$$('.sheet.open').length) return false; for(const s in sheets) sheets[s].classList.remove('open'); onShareClose(); return true; }
+function closeSheets(fromMap){ if(!$$('.sheet.open').length) return false; for(const s in sheets) sheets[s].classList.remove('open'); onShareClose();onWhereClose(); return true; }
 $$('[data-close]').forEach(b=>b.onclick=()=>closeSheets());
 $('#bLayers').onclick=()=>openSheet(sheets.layers.classList.contains('open')?'':'layers');
 $('#bStates').onclick=()=>openSheet(sheets.states.classList.contains('open')?'':'states');
 $('#bShare').onclick=()=>{state.src='gps';openSheet('share');};
+$('#bWhere').onclick=()=>openWhere('gps');
 
 /* ---- layers UI ---- */
 function buildLayerUI(){
@@ -963,10 +1012,10 @@ function setPin(lat,lng,label,amber){
 function clearPin(){state.pin=null;$('#pincard').style.display='none';dirty=true;renderShare();}
 $('#pcClr').onclick=clearPin;
 $('#pcShare').onclick=()=>{state.src='pin';openSheet('share');};
-$('#pcCopy').onclick=()=>{const p=state.pin;if(p)copyText(`${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}\n${mapsLink(p.lat,p.lng)}`);};
+$('#pcInfo').onclick=()=>openWhere('pin');
 
 /* ================= GPS ================= */
-const gps={fix:null,watchId:null,err:null,tracking:false,shareOpen:false,centerOnFix:false};
+const gps={fix:null,watchId:null,err:null,tracking:false,shareOpen:false,whereOpen:false,centerOnFix:false};
 function insecure(){return !window.isSecureContext&&location.protocol!=='file:';}
 function startWatch(){
   if(!('geolocation' in navigator)){gps.err={code:0,message:'This browser has no location support.'};renderShare();return;}
@@ -979,13 +1028,13 @@ function onFix(p){
   const c=p.coords;
   gps.fix={lat:c.latitude,lng:c.longitude,acc:c.accuracy,t:p.timestamp};gps.err=null;
   if(gps.centerOnFix){gps.centerOnFix=false;flyTo(gps.fix.lat,gps.fix.lng,clamp(Math.log2(40075016*Math.cos(gps.fix.lat*DEG)/Math.max(gps.fix.acc*4,60)/TILE),12,18.5));}
-  dirty=true;renderShare();
+  dirty=true;renderShare();whereOnFix();
 }
 function onGpsErr(e){
   gps.err={code:e.code,message:e.message};
   if(e.code===1){stopWatch();gps.tracking=false;$('#locate').classList.remove('on');}
-  renderShare();
-  if(!gps.shareOpen){
+  renderShare();renderWhere();
+  if(!gps.shareOpen&&!gps.whereOpen){
     toast(e.code===1?'Location permission denied. Allow it in your browser settings.':e.code===2?'Your device could not find a location.':'Still searching for GPS…');
   }
 }
@@ -1417,6 +1466,199 @@ window.addEventListener('offline',()=>showBanner("You're offline. Areas you've a
 window.addEventListener('online',hideBanner);
 updateInstallUI();
 
+
+/* ================= WHERE AM I ================= */
+const WH={src:'gps',seq:0,data:null,lastPt:null,lastSrc:''};
+const OLC_CH='23456789CFGHJMPQRVWX';
+function plusCode(lat,lng){                      // Open Location Code (Plus Code), 10 digits
+  lat=clamp(lat,-90,90-1e-9)+90;lng=(((lng+180)%360)+360)%360;
+  const res=[20,1,0.05,0.0025,0.000125];let code='';
+  for(let i=0;i<5;i++){
+    const r=res[i],li=Math.min(19,Math.floor(lat/r+1e-9)),gi=Math.min(19,Math.floor(lng/r+1e-9));
+    code+=OLC_CH[li]+OLC_CH[gi];lat-=li*r;lng-=gi*r;
+    if(i===3)code+='+';
+  }
+  return code;
+}
+function dms(v,pos,neg){const a=Math.abs(v),d=Math.floor(a),m=Math.floor((a-d)*60),sec=((a-d)*60-m)*60;return `${d}°${m}'${sec.toFixed(1)}"${v>=0?pos:neg}`;}
+function bearingTo(a,b){
+  const y=Math.sin((b.lng-a.lng)*DEG)*Math.cos(b.lat*DEG);
+  const x=Math.cos(a.lat*DEG)*Math.sin(b.lat*DEG)-Math.sin(a.lat*DEG)*Math.cos(b.lat*DEG)*Math.cos((b.lng-a.lng)*DEG);
+  return (Math.atan2(y,x)/DEG+360)%360;
+}
+const DIR8=['N','NE','E','SE','S','SW','W','NW'];
+const dir8=deg=>DIR8[Math.round(((deg%360)+360)%360/45)%8];
+const WMO={0:['Clear sky','☀️'],1:['Mainly clear','🌤️'],2:['Partly cloudy','⛅'],3:['Overcast','☁️'],45:['Fog','🌫️'],48:['Fog','🌫️'],51:['Light drizzle','🌦️'],53:['Drizzle','🌦️'],55:['Heavy drizzle','🌦️'],56:['Freezing drizzle','🌦️'],57:['Freezing drizzle','🌦️'],61:['Light rain','🌧️'],63:['Rain','🌧️'],65:['Heavy rain','🌧️'],66:['Freezing rain','🌧️'],67:['Freezing rain','🌧️'],80:['Light showers','🌦️'],81:['Showers','🌧️'],82:['Heavy showers','⛈️'],95:['Thunderstorm','⛈️'],96:['Thunderstorm, hail','⛈️'],99:['Thunderstorm, hail','⛈️']};
+const NEARBY=[
+  {k:'hospital',label:'Hospital / clinic',icon:'🏥',q:'hospital|clinic|doctors'},
+  {k:'police',label:'Police',icon:'🚓',q:'police'},
+  {k:'pharmacy',label:'Pharmacy',icon:'💊',q:'pharmacy'},
+  {k:'fuel',label:'Fuel station',icon:'⛽',q:'fuel'},
+  {k:'bank',label:'Bank / ATM',icon:'🏦',q:'bank|atm'},
+  {k:'school',label:'School',icon:'🏫',q:'school|college|university'},
+  {k:'market',label:'Market',icon:'🛒',q:'marketplace'},
+  {k:'fire',label:'Fire station',icon:'🚒',q:'fire_station'}
+];
+function elx(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
+async function fj(url,opt,ms){
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||9000);
+  try{const r=await fetch(url,Object.assign({},opt||{},{signal:c.signal}));if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
+  finally{clearTimeout(t);}
+}
+function wherePt(){
+  if(WH.src==='pin') return state.pin?{lat:state.pin.lat,lng:state.pin.lng,acc:null}:null;
+  return gps.fix?{lat:gps.fix.lat,lng:gps.fix.lng,acc:gps.fix.acc}:null;
+}
+function openWhere(src){WH.src=src;openSheet('where');}
+function onWhereOpen(){
+  gps.whereOpen=true;
+  if(WH.src==='gps') startWatch();
+  maybeRunWhere();
+}
+function onWhereClose(){
+  if(!gps.whereOpen) return;
+  gps.whereOpen=false;
+  if(!gps.tracking&&!gps.shareOpen) stopWatch();
+}
+function whereOnFix(){if(sheets.where.classList.contains('open')&&WH.src==='gps') maybeRunWhere();}
+function maybeRunWhere(force){
+  const p=wherePt();renderWhere();
+  if(!p) return;
+  const far=!WH.lastPt||hav(WH.lastPt,p)>(WH.src==='gps'?120:5)||WH.lastSrc!==WH.src;
+  if(!force&&!far&&WH.data) return;
+  runWhere(p);
+}
+async function nearbySearch(p){
+  const found={};let missing=NEARBY.map(n=>n.k);
+  for(const R of [1500,8000]){
+    if(!missing.length) break;
+    const parts=missing.map(k=>{const n=NEARBY.find(x=>x.k===k);return `nwr(around:${R},${p.lat},${p.lng})[amenity~"^(${n.q})$"]->.${k};.${k} out center 25;`;}).join('');
+    let j;
+    try{
+      j=await fj('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent('[out:json][timeout:15];'+parts)},17000);
+    }catch(e){ if(R===1500) throw e; break; }
+    for(const el of (j&&j.elements)||[]){
+      const t=el.tags||{},c=el.center||{lat:el.lat,lon:el.lon};
+      if(c.lat==null||c.lon==null) continue;
+      const cat=NEARBY.find(n=>new RegExp('^('+n.q+')$').test(t.amenity||''));
+      if(!cat||!missing.includes(cat.k)) continue;
+      const q={lat:c.lat,lng:c.lon},d=hav(p,q);
+      if(!found[cat.k]||d<found[cat.k].d) found[cat.k]={d,name:t.name||t['name:en']||'',lat:q.lat,lng:q.lng,dir:dir8(bearingTo(p,q))};
+    }
+    missing=missing.filter(k=>!found[k]);
+  }
+  return found;
+}
+function runWhere(p){
+  const my=++WH.seq;WH.lastPt={lat:p.lat,lng:p.lng};WH.lastSrc=WH.src;
+  const d=WH.data={rev:'load',wx:'load',near:'load'};renderWhere();
+  const done=()=>{if(my===WH.seq)renderWhere();};
+  fj(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&accept-language=en&lat=${p.lat}&lon=${p.lng}`)
+    .then(j=>{d.rev=(j&&!j.error)?j:'err';},()=>{d.rev='err';}).then(done);
+  fj(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lng}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&daily=sunrise,sunset,uv_index_max&timezone=auto&forecast_days=1`)
+    .then(j=>{d.wx=j&&j.current?j:'err';},()=>{d.wx='err';}).then(done);
+  nearbySearch(p).then(f=>{d.near=f;},()=>{d.near='err';}).then(done);
+}
+function whereCopyRow(label,value,copyVal){
+  const r=elx('div','wc');r.appendChild(elx('div','l',label));r.appendChild(elx('div','v',value));
+  const b=elx('button',null,'Copy');b.onclick=()=>copyText(copyVal||value);r.appendChild(b);return r;
+}
+function renderWhere(){
+  if(!sheets.where.classList.contains('open')) return;
+  $$('#wSeg button').forEach(b=>b.classList.toggle('on',b.dataset.src===WH.src));
+  const p=wherePt(),head=$('#wHead'),chips=$('#wChips'),co=$('#wCoords'),wx=$('#wWx'),nr=$('#wNear');
+  [head,chips,co,wx,nr].forEach(e=>e.replaceChildren());
+  $$('#shWhere .sendgrid button').forEach(b=>b.disabled=!p);
+  $('#wRefresh').disabled=!p;
+  if(!p){
+    if(WH.src==='pin'){head.appendChild(elx('div','nm','No pin yet'));head.appendChild(elx('div','ad','Close this, tap anywhere on the map to drop a pin, then press Info.'));}
+    else if(gps.err){head.appendChild(elx('div','nm',"Can't get your location"));head.appendChild(elx('div','ad',gps.err.code===1?'Permission denied. Allow location for this page in your browser settings, or drop a pin on the map and use Info.':(gps.err.message||'Try again outdoors.')));}
+    else{head.appendChild(elx('div','nm','Finding you…'));head.appendChild(elx('div','ad','Allow the location prompt. Being outdoors gives a better fix.'));}
+    return;
+  }
+  const d=WH.data&&WH.lastPt&&hav(WH.lastPt,p)<250?WH.data:null;
+  const rev=d&&d.rev&&d.rev!=='load'&&d.rev!=='err'?d.rev:null,a=rev?(rev.address||{}):{};
+  // headline
+  let title='',sub='';
+  if(rev){
+    title=rev.name||[a.house_number,a.road].filter(Boolean).join(' ')||a.neighbourhood||a.suburb||a.city||a.town||a.village||(rev.display_name||'').split(', ')[0]||'This spot';
+    sub=(rev.display_name||'').split(', ').slice(0,5).join(', ');
+  }else if(d&&d.rev==='err'){title=WH.src==='pin'&&state.pin?state.pin.label:'Your position';sub="Couldn't look up the address. Check your connection and press Refresh.";}
+  else{title=WH.src==='pin'&&state.pin?state.pin.label:'Your position';sub='Looking up the address…';}
+  head.appendChild(elx('div','nm',title));head.appendChild(elx('div','ad',sub));
+  if(p.acc!=null){
+    const ac=Math.round(p.acc),e=elx('div','acc '+(ac<=25?'good':ac<=100?'warn':'bad'),`GPS accuracy ±${ac} m · `+(ac<=25?'good fix':ac<=100?'okay fix':'weak fix, move outdoors'));
+    head.appendChild(e);
+  }
+  // chips
+  const chipDefs=[['State',a.state],['LGA',a.county||a.state_district],['Area',a.suburb||a.neighbourhood||a.city_district||a.quarter],['Town / city',a.city||a.town||a.village||a.hamlet],['Postcode',a.postcode]];
+  chipDefs.forEach(([k,v])=>{if(v){const c=elx('div','wchip',v);c.insertBefore(elx('b',null,k),c.firstChild);chips.appendChild(c);}});
+  // coordinates
+  const dec=`${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
+  co.appendChild(whereCopyRow('Decimal',dec));
+  co.appendChild(whereCopyRow('Degrees',`${dms(p.lat,'N','S')} ${dms(p.lng,'E','W')}`));
+  co.appendChild(whereCopyRow('Plus Code',plusCode(p.lat,p.lng)));
+  if(d&&d.wx&&d.wx!=='load'&&d.wx!=='err'&&d.wx.elevation!=null){
+    const r=elx('div','wc');r.appendChild(elx('div','l','Elevation'));r.appendChild(elx('div','v','≈ '+Math.round(d.wx.elevation)+' m above sea level'));co.appendChild(r);
+  }
+  // weather
+  if(!d||d.wx==='load') wx.appendChild(elx('div','muted','Loading weather…'));
+  else if(d.wx==='err') wx.appendChild(elx('div','muted','Weather unavailable right now.'));
+  else{
+    const c=d.wx.current,w=WMO[c.weather_code]||['Weather','🌡️'],dl=d.wx.daily||{};
+    const row=elx('div','wx');row.appendChild(elx('div','big',`${w[1]} ${Math.round(c.temperature_2m)}°C`));
+    const ds=elx('div','ds');
+    const l1=elx('div');l1.appendChild(elx('b',null,w[0]));l1.appendChild(document.createTextNode(` · feels like ${Math.round(c.apparent_temperature)}°`));
+    const l2=elx('div',null,`Humidity ${Math.round(c.relative_humidity_2m)}% · Wind ${Math.round(c.wind_speed_10m)} km/h ${dir8(c.wind_direction_10m)} · Rain ${c.precipitation} mm`);
+    ds.appendChild(l1);ds.appendChild(l2);
+    const hm=x=>x?String(x).slice(11,16):'';
+    if(dl.sunrise&&dl.sunrise[0]) ds.appendChild(elx('div',null,`Sunrise ${hm(dl.sunrise[0])} · Sunset ${hm(dl.sunset&&dl.sunset[0])}`+(dl.uv_index_max&&dl.uv_index_max[0]!=null?` · UV max ${Math.round(dl.uv_index_max[0])}`:'')));
+    row.appendChild(ds);wx.appendChild(row);
+  }
+  // nearby
+  if(!d||d.near==='load') nr.appendChild(elx('div','muted','Searching nearby…'));
+  else if(d.near==='err') nr.appendChild(elx('div','muted','Nearby places unavailable right now. Press Refresh to try again.'));
+  else{
+    let any=false;
+    NEARBY.forEach(n=>{
+      const f=d.near[n.k];if(!f) return;any=true;
+      const b=elx('button');b.appendChild(elx('div','ic',n.icon));
+      const t=elx('div','tx');t.appendChild(elx('b',null,f.name||n.label));t.appendChild(elx('span',null,f.name?n.label:'Unnamed on the map'));b.appendChild(t);
+      b.appendChild(elx('div','dist',`${fmtDist(f.d)} ${f.dir}`));
+      b.onclick=()=>{closeSheets();flyTo(f.lat,f.lng,17.5);setPin(f.lat,f.lng,f.name||n.label);};
+      nr.appendChild(b);
+    });
+    if(!any) nr.appendChild(elx('div','muted','Nothing mapped within 8 km.'));
+  }
+}
+function whereSummary(){
+  const p=wherePt(),d=WH.data;if(!p) return '';
+  const rev=d&&d.rev&&d.rev!=='load'&&d.rev!=='err'?d.rev:null;
+  const L=[WH.src==='gps'?'📍 I am here:':'📍 Location:'];
+  if(rev){
+    if(rev.display_name) L.push(rev.display_name.split(', ').slice(0,5).join(', '));
+    const a=rev.address||{},lga=a.county||a.state_district;
+    L.push([a.state&&'State: '+a.state,lga&&'LGA: '+lga].filter(Boolean).join(' · '));
+  }
+  L.push(`${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`,'Plus Code: '+plusCode(p.lat,p.lng));
+  if(d&&d.wx&&d.wx!=='load'&&d.wx!=='err'&&d.wx.elevation!=null) L.push(`Elevation: ≈ ${Math.round(d.wx.elevation)} m`);
+  if(d&&d.near&&typeof d.near==='object'&&d.near!=='load'){
+    NEARBY.forEach(n=>{const f=d.near[n.k];if(f)L.push(`${n.label}: ${f.name||'unnamed'} (${fmtDist(f.d)} ${f.dir})`);});
+  }
+  L.push(mapsLink(p.lat,p.lng));
+  return L.filter(Boolean).join('\n');
+}
+$$('#wSeg button').forEach(b=>b.onclick=()=>{WH.src=b.dataset.src;if(WH.src==='gps')startWatch();maybeRunWhere();});
+$('#wRefresh').onclick=()=>maybeRunWhere(true);
+$$('[data-wsend]').forEach(b=>b.onclick=()=>{
+  const t=whereSummary();if(!t){toast('No location yet');return;}
+  const k=b.dataset.wsend;
+  if(k==='wa') window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank','noopener');
+  else if(k==='copy') copyText(t);
+  else if(navigator.share) navigator.share({title:'My location',text:t}).catch(()=>{});
+  else copyText(t);
+});
+
 /* ================= MISC ================= */
 let toastT=0;
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2800);}
@@ -1445,6 +1687,7 @@ window.__nv={V,state,flyTo,applyTilt,screenToCanvas,canvasToScreen,canvasToGeo,g
 if(location.hash==='#share'){state.src='gps';openSheet('share');}
 if(!navigator.onLine) showBanner("You're offline. Areas you've already viewed still show.");
 Object.assign(window.__nv,{hav,polyArea,meas,setMeasure,addMeasurePoint,buildExport,refreshExport,ex,fmtDist,areaMain,areaDetail});
+Object.assign(window.__nv,{WH,plusCode,dms,openWhere,runWhere,whereSummary,nearbySearch});
 requestAnimationFrame(loop);
 })();
 </script>
