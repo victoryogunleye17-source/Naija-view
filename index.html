@@ -199,6 +199,30 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 .wtop{display:flex;gap:8px;align-items:center}
 .wtop .seg{flex:1}
 @media (max-width:719px){#ctrls{top:calc(70px + var(--st))}}
+
+/* SOS */
+#sosBtn{position:relative;width:46px;height:46px;border-radius:14px;margin-top:8px;display:flex;align-items:center;justify-content:center;background:#d62828;color:#fff;font-weight:800;font-size:13px;letter-spacing:.02em;border:1px solid rgba(255,255,255,.35);box-shadow:0 4px 14px rgba(214,40,40,.55);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;overflow:hidden}
+#sosBtn .ring{position:absolute;inset:0;background:conic-gradient(rgba(255,255,255,.55) calc(var(--p,0)*1%),transparent 0);pointer-events:none}
+#sosBtn span{position:relative}
+#sosBtn.hold{transform:scale(1.08)}
+#sosOv{position:fixed;inset:0;z-index:90;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:calc(20px + var(--st)) 20px calc(20px + var(--sb));text-align:center;background:rgba(120,10,10,.96);color:#fff}
+#sosOv.on{display:flex}
+#sosOv h2{margin:0;font-size:28px;letter-spacing:.02em}
+#sosBig{font-size:64px;font-weight:800;line-height:1}
+#sosMsg{max-width:420px;font-size:16px}
+#sosCo{font:13px/1.5 var(--mono);opacity:.9}
+#sosLog{font-size:13px;opacity:.85;max-width:420px}
+#sosOv button{min-width:240px;height:54px;border-radius:14px;font-weight:700;font-size:16px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);color:#fff;position:relative;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none}
+#sosOv button.call{background:#fff;color:#a01212;text-decoration:none}
+#sosOv a.call{display:flex;align-items:center;justify-content:center;min-width:240px;height:54px;border-radius:14px;font-weight:700;font-size:16px;background:#fff;color:#a01212;text-decoration:none}
+#sosOv{justify-content:flex-start;overflow-y:auto}
+#sosList{width:100%;max-width:440px;display:flex;flex-direction:column;gap:10px;text-align:left}
+.sag{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:10px 12px}
+.sag b{display:block;font-size:15px}.sag small{display:block;opacity:.8;margin-bottom:8px}
+.sag .row{display:flex;flex-wrap:wrap;gap:6px}
+.sag a{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;border-radius:10px;background:#fff;color:#a01212;font-weight:700;font-size:14px;text-decoration:none}
+.sag a.w{background:#1fa855;color:#fff}.sag a.e{background:#3d9bff;color:#fff}.sag a.s{background:#ffb547;color:#2a1a00}
+#sosStop .ring{position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.35) calc(var(--p,0)*1%),transparent 0);pointer-events:none}
 </style>
 </head>
 <body>
@@ -233,6 +257,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
   <button id="home" class="fab glass" aria-label="Show all of Nigeria"><svg class="i" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   <button id="measure" class="fab glass" aria-label="Measure distance or area"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 16.5L16.5 3.5l4 4-13 13z"/><path d="M7 13l2.2 2.2M10 10l2.2 2.2M13 7l2.2 2.2"/></svg></button>
   <button id="camera" class="fab glass" aria-label="Share as image"><svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6"/></svg></button>
+  <button id="sosBtn" aria-label="SOS emergency. Press and hold to send an alert"><div class="ring"></div><span>SOS</span></button>
 </div>
 
 <div id="read" class="glass">
@@ -265,6 +290,16 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
   <button id="bShare" class="share"><svg class="i" viewBox="0 0 24 24"><path d="M12 21.5s-7-6.3-7-11.5a7 7 0 0 1 14 0c0 5.2-7 11.5-7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg>Share location</button>
 </div>
 <div id="attr"></div>
+<div id="sosOv" role="alertdialog" aria-live="assertive">
+  <h2>🆘 SOS</h2>
+  <div id="sosBig">5</div>
+  <div id="sosMsg"></div>
+  <div id="sosCo"></div>
+  <div id="sosLog"></div>
+  <a class="call" id="sosCall" href="tel:112">📞 Call 112</a>
+  <div id="sosList"></div>
+  <button id="sosStop"><div class="ring"></div><span id="sosStopTxt">Cancel</span></button>
+</div>
 <div id="toast"></div>
 
 <!-- Layers / angle -->
@@ -373,6 +408,34 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 // (Google Apps Script web app, Formspree, your own API…). Leave '' to hide the button.
 const REPORT_ENDPOINT = '';
 const REPORT_LABEL    = 'control room';
+
+/* ---- SOS settings ---- */
+// A browser app can't text or call agencies by itself. Put the URL(s) of a server that agencies
+// (or you) run in SOS_ENDPOINTS: every alert is POSTed there as JSON. See SOS-SETUP.md.
+const SOS_ENDPOINTS = [];                 // e.g. ['https://your-relay.example.com/sos']
+// NO-SERVER OPTION: Telegram. Make a bot with @BotFather, add it to a group (or message it) with the people
+// who should be alerted, and put the bot token and chat ids here. Alerts go straight from the phone to Telegram.
+const SOS_TG_TOKEN  = '';                 // e.g. '123456:ABC-DEF...' (use a bot made only for SOS)
+const SOS_TG_CHATS  = [];                 // e.g. ['-1001234567890', '987654321']
+const SOS_TG_API    = 'https://api.telegram.org';
+// One-tap buttons on the SOS screen (the user taps Send; browsers can't send SMS/WhatsApp by themselves)
+const SOS_CONTACTS  = [];
+// Official lines, collected from npf.gov.ng and from Nigerian Police / Army public announcements.
+// Numbers change, so check them now and then. call = phone lines, wa = WhatsApp number, sms = numbers that accept SMS.
+const SOS_AGENCIES  = [
+  {name:'Nigeria Police Force', note:'Emergency and complaint lines',
+   call:['08057000001','08057000002','09133333785','09133333786'], wa:'08057000003', email:'pressforabuja@police.gov.ng'},
+  {name:'Nigerian Army', note:'Call, SMS or WhatsApp (announced by the Army)',
+   call:['193','07017222225','09060005290','08099900131','08077444303'], wa:'07017222225', sms:['07017222225','09060005290','08099900131','08077444303']},
+  {name:'Lagos Police Command', note:'Lagos State only',
+   call:['08065154338','08063299264']},
+];                 // e.g. ['08012345678', '+2348098765432']
+const SOS_COUNT     = 30;                 // how many alerts to send
+const SOS_GAP_MS    = 10000;              // gap between alerts (30 x 10 s = about 5 min of live tracking)
+const SOS_HOLD_MS   = 2000;               // how long to hold the SOS button
+const SOS_ARM_SECS  = 5;                  // cancel window before the first alert goes out
+const SOS_EMERGENCY = '112';              // Nigeria's national emergency number
+const SOS_TEXT      = 'SOS! Please check my location. I am in danger.';
 
 const TILE=256, MIN_Z=3, MAX_Z=23, DEG=Math.PI/180;
 const NIGERIA={w:2.668,s:4.27,e:14.68,n:13.892};
@@ -1658,6 +1721,109 @@ $$('[data-wsend]').forEach(b=>b.onclick=()=>{
   else if(navigator.share) navigator.share({title:'My location',text:t}).catch(()=>{});
   else copyText(t);
 });
+
+
+/* ================= SOS ================= */
+const sos={state:'idle',n:0,ok:0,timer:0,armT:0,wake:null,id:''};
+const sosEl={btn:$('#sosBtn'),ov:$('#sosOv'),big:$('#sosBig'),msg:$('#sosMsg'),co:$('#sosCo'),log:$('#sosLog'),stop:$('#sosStop'),stopTxt:$('#sosStopTxt')};
+function holdable(el,ms,onDone,onProg){
+  let t0=0,raf=0,on=false;
+  const prog=()=>{if(!on)return;const p=Math.min(100,(performance.now()-t0)/ms*100);onProg(p);if(p>=100){on=false;onProg(0);onDone();}else raf=requestAnimationFrame(prog);};
+  const down=e=>{e.preventDefault();if(on)return;on=true;t0=performance.now();try{el.setPointerCapture(e.pointerId);}catch(_){ }el.classList.add('hold');raf=requestAnimationFrame(prog);if(navigator.vibrate)navigator.vibrate(30);};
+  const up=()=>{if(!on)return;on=false;cancelAnimationFrame(raf);onProg(0);el.classList.remove('hold');};
+  el.addEventListener('pointerdown',down);
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,up));
+  el.addEventListener('contextmenu',e=>e.preventDefault());
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat){toast('Press and hold the SOS button for 2 seconds');}});
+}
+holdable(sosEl.btn,SOS_HOLD_MS,()=>armSOS(),p=>{sosEl.btn.style.setProperty('--p',p);if(!p)sosEl.btn.classList.remove('hold');});
+holdable(sosEl.stop,1500,()=>{if(sos.state==='live')stopSOS('You stopped the alerts.');},p=>sosEl.stop.style.setProperty('--p',p));
+sosEl.stop.addEventListener('pointerdown',()=>{if(sos.state==='arming')stopSOS('SOS cancelled.');else if(sos.state==='done')stopSOS('');});
+
+function sosPoint(){
+  if(gps.fix) return {lat:gps.fix.lat,lng:gps.fix.lng,acc:gps.fix.acc,t:gps.fix.t};
+  return null;
+}
+function armSOS(){
+  if(sos.state!=='idle') return;
+  sos.state='arming';sos.n=0;sos.ok=0;sos.id='sos-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  gps.tracking=true;$('#locate').classList.add('on');startWatch();
+  try{if(navigator.wakeLock)navigator.wakeLock.request('screen').then(w=>sos.wake=w).catch(()=>{});}catch(_){}
+  sosEl.ov.classList.add('on');
+  sosEl.msg.textContent='Sending your location in…';sosEl.log.textContent='Tap Cancel if this was a mistake.';$('#sosList').innerHTML='';
+  sosEl.stopTxt.textContent='Cancel';sosEl.co.textContent='';
+  let s=SOS_ARM_SECS;sosEl.big.textContent=s;
+  if(navigator.vibrate)navigator.vibrate([200,100,200]);
+  sos.armT=setInterval(()=>{s--;if(s<=0){clearInterval(sos.armT);goLive();}else{sosEl.big.textContent=s;if(navigator.vibrate)navigator.vibrate(80);}},1000);
+}
+function goLive(){
+  if(sos.state!=='arming') return;
+  sos.state='live';
+  sosEl.big.textContent=sosAuto()?'0/'+SOS_COUNT:'SOS';
+  sosEl.msg.textContent=SOS_TEXT;
+  sosEl.stopTxt.textContent="I'm safe. Hold to stop";
+  sendAlert();
+  sos.timer=setInterval(sendAlert,SOS_GAP_MS);
+}
+const sosAuto=()=>!!(SOS_ENDPOINTS.length||(SOS_TG_TOKEN&&SOS_TG_CHATS.length));
+function renderSosList(text){
+  const enc=encodeURIComponent,ios=/iPhone|iPad|iPod/.test(navigator.userAgent),sep=ios?'&':'?';
+  const intl=x=>x.length<=4?x:'+'+normNum(x);
+  const groups=SOS_AGENCIES.slice();
+  const mine=SOS_CONTACTS.filter(Boolean);
+  if(mine.length) groups.push({name:'My contacts',note:'Family and friends',call:mine,wa:mine[0],sms:mine});
+  $('#sosList').innerHTML=groups.map(g=>{
+    const r=[];
+    (g.call||[]).forEach(n=>r.push(`<a href="tel:${intl(n)}">📞 ${n}</a>`));
+    if(g.wa)r.push(`<a class="w" href="https://wa.me/${normNum(g.wa)}?text=${enc(text)}" target="_blank" rel="noopener">WhatsApp</a>`);
+    if(g.sms&&g.sms.length)r.push(`<a class="s" href="sms:${g.sms.map(intl).join(',')}${sep}body=${enc(text)}">SMS</a>`);
+    if(g.email)r.push(`<a class="e" href="mailto:${g.email}?subject=${enc('SOS - I am in danger')}&body=${enc(text)}">✉ Email</a>`);
+    return `<div class="sag"><b>${g.name}</b><small>${g.note||''}</small><div class="row">${r.join('')}</div></div>`;
+  }).join('');
+}
+async function sendAlert(){
+  if(sos.state!=='live') return;
+  const auto=sosAuto();
+  if(auto&&sos.n>=SOS_COUNT){finishSOS();return;}
+  const p=sosPoint();
+  if(auto)sos.n++;
+  const n=sos.n;
+  const payload={type:'SOS',id:sos.id,seq:n,of:SOS_COUNT,message:SOS_TEXT,
+    lat:p?p.lat:null,lng:p?p.lng:null,accuracy:p?p.acc:null,
+    maps:p?mapsLink(p.lat,p.lng):null,time:new Date().toISOString()};
+  sosEl.big.textContent=auto?n+'/'+SOS_COUNT:'SOS';
+  sosEl.co.textContent=p?`${p.lat.toFixed(6)}, ${p.lng.toFixed(6)} (±${Math.round(p.acc)} m)`:'Still finding your GPS…';
+  const text=SOS_TEXT+(payload.maps?'\n📍 My location: '+payload.maps:'\n(My GPS is still loading)')+(auto?`\n(alert ${n}/${SOS_COUNT})`:'');
+  renderSosList(text);
+  if(!auto){
+    sosEl.log.textContent='Tap WhatsApp, SMS or Email on each line below, then press Send. Your location in these messages refreshes every few seconds.';
+    return;
+  }
+  const jobs=SOS_ENDPOINTS.map(u=>fetch(u,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)}).then(()=>true));
+  if(SOS_TG_TOKEN&&SOS_TG_CHATS.length)SOS_TG_CHATS.forEach(c=>jobs.push(
+    fetch(`${SOS_TG_API}/bot${SOS_TG_TOKEN}/sendMessage`,{method:'POST',keepalive:true,body:new URLSearchParams({chat_id:c,text:'🆘 '+text})}).then(r=>r.ok)));
+  const results=await Promise.allSettled(jobs);
+  const good=results.some(r=>r.status==='fulfilled'&&r.value!==false);
+  if(good)sos.ok++;
+  if(sos.state==='live')sosEl.log.textContent=good?`Alert ${n} sent automatically. You can also tap the buttons below.`:`Alert ${n} could not be sent (no network?). Retrying…`;
+}
+function sosFallbackShare(payload){
+  // Browsers cannot auto-send SMS. Open the share sheet / composer once so a trusted contact still gets the location.
+  const msg=SOS_TEXT+(payload.maps?'\n'+payload.maps:'');
+  if(navigator.share)navigator.share({title:'SOS',text:msg}).catch(()=>{});
+  else location.href='sms:?body='+encodeURIComponent(msg);
+}
+function finishSOS(){
+  clearInterval(sos.timer);sos.state='done';
+  sosEl.log.textContent=`All ${SOS_COUNT} alerts sent (${sos.ok} delivered). Stay safe. Call 112 if you can.`;
+  sosEl.stopTxt.textContent='Close';
+}
+function stopSOS(m){
+  clearInterval(sos.armT);clearInterval(sos.timer);
+  try{sos.wake&&sos.wake.release();}catch(_){}sos.wake=null;
+  sos.state='idle';sosEl.ov.classList.remove('on');
+  if(m)toast(m);
+}
 
 /* ================= MISC ================= */
 let toastT=0;
