@@ -1,0 +1,20 @@
+{
+  "name": "NaijaView · Nigeria Satellite Atlas",
+  "short_name": "NaijaView",
+  "description": "Live Nigeria satellite map with measuring, location sharing and image export.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#06090c",
+  "theme_color": "#06090c",
+  "categories": ["navigation", "utilities"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Share my location", "short_name": "Share", "url": "./#share" }
+  ]
+}
