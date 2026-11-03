@@ -157,6 +157,13 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 #banner{position:fixed;left:10px;right:10px;top:calc(68px + var(--st));max-width:520px;z-index:18;padding:10px 14px;border-radius:12px;background:rgba(80,30,20,.92);border:1px solid rgba(255,120,90,.5);display:none;font-size:13px}
 #ov{position:absolute;left:0;top:0;pointer-events:none}
 #stage.measuring{cursor:crosshair}
+#tkpanel{position:fixed;left:10px;right:10px;bottom:calc(84px + var(--sb));max-width:520px;margin:0 auto;z-index:17;border-radius:16px;padding:10px 12px 12px;display:none}
+#tkpanel .tm{display:flex;gap:6px;margin-bottom:8px}
+#tkpanel .tm button{flex:1;height:38px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-weight:600;font-size:13px}
+#tkpanel .tm button.on{background:var(--green);color:#04140c;border-color:transparent}
+#tkpanel .tr{display:flex;align-items:center;gap:10px}
+#tkpanel .ts{flex:1;min-width:0}#tkpanel .ts b{font-size:20px}#tkpanel .ts div{font-size:12px;color:var(--mute)}
+#tkpanel .tx{height:38px;padding:0 14px;border-radius:10px;background:var(--red);color:#fff;border:0;font-weight:700;font-size:13px}
 #mpanel{position:fixed;left:10px;right:10px;bottom:calc(84px + var(--sb));max-width:520px;margin:0 auto;z-index:17;border-radius:16px;padding:10px 12px 12px;display:none}
 #mpanel .seg{width:100%}
 #mStat{font:700 26px var(--mono);margin:10px 0 2px;letter-spacing:-.01em}
@@ -271,9 +278,15 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 
 <div id="pincard" class="glass">
   <div class="txt"><div class="lbl" id="pcLbl">Dropped pin</div><div class="co" id="pcCo"></div></div>
-  <button class="g" id="pcShare">Share</button>
+  <button class="g" id="pcTrack">Track</button>
+  <button id="pcShare">Share</button>
   <button id="pcInfo">Info</button>
   <button class="x" id="pcClr" aria-label="Remove pin"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</div>
+
+<div id="tkpanel" class="glass">
+  <div class="tm" id="tkMode"><button data-m="car" class="on">🚗 Car</button><button data-m="bike">🚲 Bike</button><button data-m="walk">🚶 Walk</button></div>
+  <div class="tr"><div class="ts"><b id="tkEta">Finding you…</b><div id="tkSub">Waiting for GPS</div></div><button class="tx" id="tkStop">Stop</button></div>
 </div>
 
 <div id="mpanel" class="glass">
@@ -1155,9 +1168,10 @@ function setPin(lat,lng,label,amber){
   state.pin={lat,lng,label,amber:!!amber};
   $('#mkPin').classList.toggle('amber',!!amber);
   $('#pcLbl').textContent=label;$('#pcCo').textContent=lat.toFixed(6)+', '+lng.toFixed(6);
-  $('#pincard').style.display='flex';dirty=true;renderShare();
+  if(tk.on){tk.line=null;tk.last=null;tk.fitted=false;tk.arrived=false;tkUpdate(true);}else $('#pincard').style.display='flex';
+  dirty=true;renderShare();
 }
-function clearPin(){state.pin=null;$('#pincard').style.display='none';dirty=true;renderShare();}
+function clearPin(){stopTrack();state.pin=null;$('#pincard').style.display='none';dirty=true;renderShare();}
 $('#pcClr').onclick=clearPin;
 $('#pcShare').onclick=()=>{state.src='pin';openSheet('share');};
 $('#pcInfo').onclick=()=>openWhere('pin');
@@ -1176,7 +1190,7 @@ function onFix(p){
   const c=p.coords;
   gps.fix={lat:c.latitude,lng:c.longitude,acc:c.accuracy,t:p.timestamp};gps.err=null;
   if(gps.centerOnFix){gps.centerOnFix=false;flyTo(gps.fix.lat,gps.fix.lng,clamp(Math.log2(40075016*Math.cos(gps.fix.lat*DEG)/Math.max(gps.fix.acc*4,60)/TILE),12,18.5));}
-  dirty=true;renderShare();whereOnFix();
+  dirty=true;renderShare();whereOnFix();tkUpdate();
 }
 function onGpsErr(e){
   gps.err={code:e.code,message:e.message};
@@ -1349,7 +1363,7 @@ function setMeasure(on){
   meas.on=on;$('#measure').classList.toggle('on',on);
   $('#mpanel').style.display=on?'block':'none';stage.classList.toggle('measuring',on);
   if(on){$('#pincard').style.display='none';closeSheets();updateMeasureUI();}
-  else if(state.pin) $('#pincard').style.display='flex';
+  else if(state.pin&&!tk.on) $('#pincard').style.display='flex';
   dirty=true;
 }
 function measHit(x,y){
@@ -1416,11 +1430,87 @@ function drawMeasure(g){                       // g is already in CSS-pixel spac
   g.restore();
 }
 function drawOverlay(){
-  if(!meas.pts.length&&!ovHad) return;
+  const has=meas.pts.length>0||tk.on;
+  if(!has&&!ovHad) return;
   octx.setTransform(dprO,0,0,dprO,0,0);octx.clearRect(0,0,W,H);
-  ovHad=meas.pts.length>0;
-  if(ovHad) drawMeasure(octx);
+  ovHad=has;
+  if(meas.pts.length) drawMeasure(octx);
+  if(tk.on) drawRoute(octx);
 }
+/* ================= TRACK (route to pin / shared location) ================= */
+const tk={on:false,mode:'car',line:null,dist:0,dur:0,last:null,busy:false,t:0,fitted:false,arrived:false};
+const TK_SPEED={car:40,bike:15,walk:5};                       // km/h, used when the route service is unreachable
+const TK_URL={car:'routed-car',bike:'routed-bike',walk:'routed-foot'};
+function fmtEta(min){min=Math.max(1,Math.round(min));return min<60?min+' min':Math.floor(min/60)+' h '+(min%60)+' min';}
+function drawRoute(g){
+  if(!state.pin||!gps.fix) return;
+  const pts=tk.line||[[gps.fix.lat,gps.fix.lng],[state.pin.lat,state.pin.lng]];
+  const sp=pts.map(q=>geoToScreen(q[0],q[1])).filter(Boolean);
+  if(sp.length<2) return;
+  g.lineJoin=g.lineCap='round';
+  for(const [w,c] of [[8,'rgba(255,255,255,.9)'],[5,'#3d9bff']]){
+    g.beginPath();g.lineWidth=w;g.strokeStyle=c;g.setLineDash(tk.line?[]:[2,10]);
+    sp.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.stroke();
+  }
+  g.setLineDash([]);
+}
+async function fetchRoute(a,b){
+  const url=`https://routing.openstreetmap.de/${TK_URL[tk.mode]}/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
+  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),9000);
+  try{
+    const j=await (await fetch(url,{signal:ctl.signal})).json(),r=j.routes&&j.routes[0];
+    if(!r) return null;
+    const c=r.geometry.coordinates,step=Math.max(1,Math.floor(c.length/300));
+    const line=c.filter((_,i)=>i%step===0||i===c.length-1).map(q=>[q[1],q[0]]);
+    return {line,dist:r.distance,dur:r.duration};
+  }catch(e){return null;}finally{clearTimeout(to);}
+}
+function tkShow(){
+  const dist=tk.line?tk.dist:hav(gps.fix,state.pin);
+  const min=tk.line?tk.dur/60:dist/1000/TK_SPEED[tk.mode]*60;
+  $('#tkEta').textContent=dist<30?'You have arrived':fmtEta(min)+' · '+fmtDist(dist);
+  $('#tkSub').textContent=(tk.line?'Following roads':'Straight line (no route service)')+' · '+state.pin.label;
+  if(dist<30&&!tk.arrived){tk.arrived=true;toast('You have arrived');}
+}
+async function tkUpdate(force){
+  if(!tk.on||!state.pin) return;
+  if(!gps.fix){$('#tkEta').textContent='Finding you…';$('#tkSub').textContent='Waiting for GPS';return;}
+  const f=gps.fix;
+  if(force||!tk.last||hav(tk.last,f)>50||Date.now()-tk.t>60000){
+    if(!tk.busy&&(force||Date.now()-tk.t>8000||!tk.last)){
+      tk.busy=true;tk.t=Date.now();tk.last={lat:f.lat,lng:f.lng};
+      const mode=tk.mode,r=await fetchRoute(f,state.pin);tk.busy=false;
+      if(!tk.on||mode!==tk.mode) return;
+      if(r){tk.line=r.line;tk.dist=r.dist;tk.dur=r.dur;}else tk.line=null;
+    }
+  }
+  if(!tk.fitted){
+    tk.fitted=true;const pts=tk.line||[[f.lat,f.lng],[state.pin.lat,state.pin.lng]];
+    const la=pts.map(q=>q[0]),ln=pts.map(q=>q[1]);
+    fitBounds(Math.min(...la),Math.min(...ln),Math.max(...la),Math.max(...ln),{pad:0.2,maxZ:17});
+  }
+  tkShow();dirty=true;
+}
+function startTrack(){
+  if(!state.pin){toast('Tap the map to drop a pin first');return;}
+  if(meas.on) setMeasure(false);
+  tk.on=true;tk.line=null;tk.last=null;tk.fitted=false;tk.arrived=false;
+  $('#pincard').style.display='none';$('#tkpanel').style.display='block';
+  gps.tracking=true;$('#locate').classList.add('on');startWatch();
+  tkUpdate(true);
+}
+function stopTrack(){
+  if(!tk.on) return;
+  tk.on=false;tk.line=null;$('#tkpanel').style.display='none';
+  if(state.pin) $('#pincard').style.display='flex';
+  dirty=true;
+}
+$('#pcTrack').onclick=startTrack;
+$('#tkStop').onclick=stopTrack;
+$$('#tkMode button').forEach(b=>b.onclick=()=>{
+  tk.mode=b.dataset.m;tk.line=null;tk.fitted=false;
+  $$('#tkMode button').forEach(x=>x.classList.toggle('on',x===b));tkUpdate(true);
+});
 
 /* ================= SHARE AS IMAGE ================= */
 const ex={opts:{info:true,center:false},blob:null,url:null,seq:0,placeKey:'',place:''};
