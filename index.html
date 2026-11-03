@@ -1458,7 +1458,7 @@ function drawOverlay(){
   if(tk.on) drawRoute(octx);
 }
 /* ================= HOUSE 3D (pinned building, turn and zoom) ================= */
-const hv={poly:null,floors:1,yaw:35,pitch:55,zoom:1,spin:true,raf:0,tok:0,est:false,pin:[0,0],w:10,l:8,src:''};
+const hv={poly:null,floors:1,yaw:35,pitch:55,zoom:1,spin:true,raf:0,tok:0,est:false,pin:[0,0],w:10,l:8,src:'',tex:null,Gt:45};
 const hvM=(lat0,lng0,lat,lng)=>[(lng-lng0)*111320*Math.cos(lat0*DEG),(lat-lat0)*110574];
 function inPoly(x,y,p){let c=false;for(let i=0,j=p.length-1;i<p.length;j=i++)if((p[i][1]>y)!==(p[j][1]>y)&&x<(p[j][0]-p[i][0])*(y-p[i][1])/(p[j][1]-p[i][1])+p[i][0])c=!c;return c;}
 const hvArea=p=>{let a=0;for(let i=0;i<p.length;i++){const q=p[(i+1)%p.length];a+=p[i][0]*q[1]-q[0]*p[i][1];}return a/2;};
@@ -1471,13 +1471,35 @@ async function hvFetch(lat,lng){
   }
   return null;
 }
+async function hvTexture(lat,lng,Gt,tok){
+  const L=BASES.sat;let z=19;
+  const mk=zz=>{const mpp=156543.03392*Math.cos(lat*DEG)/Math.pow(2,zz);return {mpp,N:Math.min(1400,Math.ceil(2*Gt/mpp))};};
+  try{
+    const c0=project(lat,lng,z),t0=await loadImage(L.url(z,Math.floor(c0.x/TILE),Math.floor(c0.y/TILE)),true).catch(()=>null);
+    if(!t0||looksMissing(t0)) z=18;
+  }catch(e){z=18;}
+  const {mpp,N}=mk(z),cv=document.createElement('canvas');cv.width=cv.height=N;const g=cv.getContext('2d');
+  g.fillStyle='#24392d';g.fillRect(0,0,N,N);
+  const ctr=project(lat,lng,z),half=N/2,x0=ctr.x-half,y0=ctr.y-half;
+  const jobs=[];
+  for(let ty=Math.floor(y0/TILE);ty<=Math.floor((y0+N)/TILE);ty++)for(let tx=Math.floor(x0/TILE);tx<=Math.floor((x0+N)/TILE);tx++){
+    jobs.push((async()=>{
+      const url=L.url(z,tx,ty);let im=null;
+      try{im=await loadImage(url,true);}catch(e){try{im=await loadImage(url,false);}catch(e2){}}
+      if(im) g.drawImage(im,Math.round(tx*TILE-x0),Math.round(ty*TILE-y0));
+    })());
+  }
+  await Promise.all(jobs);
+  if(tok!==hv.tok) return;
+  hv.tex=cv;hv.texMpp=mpp;hv.texG=N*mpp/2;
+}
 function hvEstimate(){const a=hv.w/2,b=hv.l/2;hv.poly=[[-a,-b],[a,-b],[a,b],[-a,b]];hv.pin=[0,0];}
 function hvSetFloors(n){hv.floors=clamp(Math.round(n)||1,1,12);$('#hvFl').value=hv.floors;$('#hvFlO').textContent=hv.floors;hvInfoTxt();}
 function hvInfoTxt(){const a=Math.abs(hvArea(hv.poly||[]));$('#hvInfo').textContent=(hv.est?'Estimated box (no map outline here). Adjust the size below.':'Outline from OpenStreetMap')+` · ${Math.round(a)} m² · ${hv.floors} floor${hv.floors>1?'s':''} · drag to turn`;}
 async function openHouse(){
   if(!state.pin) return;
   const {lat,lng}=state.pin,tok=++hv.tok;
-  hv.poly=null;hv.yaw=35;hv.pitch=55;hv.zoom=1;
+  hv.poly=null;hv.tex=null;hv.yaw=35;hv.pitch=55;hv.zoom=1;
   openSheet('house');$('#hvInfo').textContent='Looking up the building…';
   if(!hv.raf) hv.raf=requestAnimationFrame(hvLoop);
   const els=await hvFetch(lat,lng);
@@ -1494,10 +1516,11 @@ async function openHouse(){
     const cx=p.reduce((a,q)=>a+q[0],0)/p.length,cy=p.reduce((a,q)=>a+q[1],0)/p.length;
     hv.pin=[-cx,-cy];p=p.map(q=>[q[0]-cx,q[1]-cy]);
     if(hvArea(p)<0) p.reverse();
-    hv.poly=p;hv.est=false;
+    hv.poly=p;hv.est=false;hv.cLat=lat+cy/110574;hv.cLng=lng+cx/(111320*Math.cos(lat*DEG));
     const t=best.t,lv=parseFloat(t['building:levels']),ht=parseFloat(t.height);
     hvSetFloors(lv||(ht?ht/3:1));
-  }else{hv.est=true;hvEstimate();hvSetFloors(1);}
+  }else{hv.est=true;hvEstimate();hvSetFloors(1);hv.cLat=lat;hv.cLng=lng;}
+  {let R=3;for(const q of hv.poly)R=Math.max(R,Math.hypot(q[0],q[1]));hv.Gt=clamp(R+14,45,150);hvTexture(hv.cLat,hv.cLng,hv.Gt,tok).catch(()=>{});}
   $('#hvEst').style.display=hv.est?'block':'none';hvInfoTxt();
 }
 function hvLoop(){
@@ -1516,8 +1539,21 @@ function hvDraw(){
   const ya=hv.yaw*DEG,pi=hv.pitch*DEG,cY=Math.cos(ya),sY=Math.sin(ya),cP=Math.cos(pi),sP=Math.sin(pi);
   const T=(x,y,z)=>{const xr=x*cY-y*sY,yr=x*sY+y*cY;return {x:w/2+xr*s,y:h/2-(yr*sP+(z-H/2)*cP)*s,d:yr*cP-(z-H/2)*sP};};
   const poly=(pts,fill,stroke)=>{g.beginPath();pts.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();g.fillStyle=fill;g.fill();if(stroke){g.strokeStyle=stroke;g.lineWidth=1;g.stroke();}};
-  const G=R+4;
-  poly([[-G,-G],[G,-G],[G,G],[-G,G]].map(q=>T(q[0],q[1],0)),'#24392d','rgba(255,255,255,.12)');
+  const tex=hv.tex,G=tex?Math.min(hv.texG,R+10):R+4;
+  // satellite texture: the view is orthographic, so the imagery maps with one affine transform
+  const drawTex=(z)=>{
+    const a=1/ (tex.width/(2*hv.texG)),u=hv.texG;           // metres per texture pixel, half-extent
+    const m=(tex.width/2)*a;                                 // = texG
+    g.save();
+    g.transform(s*a*cY,-s*sP*a*sY,s*a*sY,s*sP*a*cY,w/2-s*m*(cY+sY),h/2-s*sP*m*(cY-sY)-s*cP*(z-H/2));
+    g.imageSmoothingQuality='high';g.drawImage(tex,0,0);g.restore();
+  };
+  const gq=[[-G,-G],[G,-G],[G,G],[-G,G]].map(q=>T(q[0],q[1],0));
+  if(tex){
+    g.save();g.beginPath();gq.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();g.clip();
+    drawTex(0);g.fillStyle='rgba(0,0,0,.12)';g.fill();g.restore();
+    g.beginPath();gq.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();g.strokeStyle='rgba(255,255,255,.25)';g.lineWidth=1;g.stroke();
+  }else poly(gq,'#24392d','rgba(255,255,255,.12)');
   const walls=[];
   for(let i=0;i<P.length;i++){
     const a=P[i],b=P[(i+1)%P.length],nx=b[1]-a[1],ny=-(b[0]-a[0]),nl=Math.hypot(nx,ny)||1;
@@ -1533,7 +1569,11 @@ function hvDraw(){
     g.strokeStyle='rgba(0,0,0,.22)';
     for(let f=1;f<hv.floors;f++){const p1=T(k.a[0],k.a[1],f*3),p2=T(k.b[0],k.b[1],f*3);g.beginPath();g.moveTo(p1.x,p1.y);g.lineTo(p2.x,p2.y);g.stroke();}
   }
-  poly(P.map(q=>T(q[0],q[1],H)),'#a9553a','rgba(0,0,0,.45)');
+  const rf=P.map(q=>T(q[0],q[1],H));
+  if(tex){
+    g.save();g.beginPath();rf.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();g.clip();
+    drawTex(H);g.restore();poly(rf,'rgba(0,0,0,0)','rgba(0,0,0,.55)');
+  }else poly(rf,'#a9553a','rgba(0,0,0,.45)');
   const m=T(hv.pin[0],hv.pin[1],H);g.beginPath();g.arc(m.x,m.y,5,0,7);g.fillStyle='#ffb547';g.fill();g.strokeStyle='#000';g.lineWidth=1.5;g.stroke();
 }
 (()=>{
