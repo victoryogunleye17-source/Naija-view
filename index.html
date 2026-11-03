@@ -157,6 +157,8 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 #banner{position:fixed;left:10px;right:10px;top:calc(68px + var(--st));max-width:520px;z-index:18;padding:10px 14px;border-radius:12px;background:rgba(80,30,20,.92);border:1px solid rgba(255,120,90,.5);display:none;font-size:13px}
 #ov{position:absolute;left:0;top:0;pointer-events:none}
 #stage.measuring{cursor:crosshair}
+#hvCv{width:100%;height:300px;border-radius:14px;background:radial-gradient(#1f2e38,#0a0f13);touch-action:none;display:block;cursor:grab}
+#hvInfo{font-size:12.5px;color:var(--mute);margin:8px 0}
 #tkpanel{position:fixed;left:10px;right:10px;bottom:calc(84px + var(--sb));max-width:520px;margin:0 auto;z-index:17;border-radius:16px;padding:10px 12px 12px;display:none}
 #tkpanel .tm{display:flex;gap:6px;margin-bottom:8px}
 #tkpanel .tm button{flex:1;height:38px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-weight:600;font-size:13px}
@@ -280,6 +282,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 <div id="pincard" class="glass">
   <div class="txt"><div class="lbl" id="pcLbl">Dropped pin</div><div class="co" id="pcCo"></div></div>
   <button class="g" id="pcTrack">Track</button>
+  <button id="pcHouse" aria-label="3D house view">3D</button>
   <button id="pcShare">Share</button>
   <button id="pcInfo">Info</button>
   <button class="x" id="pcClr" aria-label="Remove pin"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -397,6 +400,19 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
       <button data-wsend="native">More…</button>
     </div>
     <p class="fine">Addresses and services come from OpenStreetMap and weather from Open-Meteo. In some areas the data is thin or out of date, so treat it as a guide.</p>
+  </div>
+</section>
+
+<!-- 3D house -->
+<section class="sheet glass" id="shHouse" aria-label="House view">
+  <header><h2>House view</h2><button class="x" data-close aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="body">
+    <canvas id="hvCv"></canvas>
+    <div id="hvInfo">Drag to turn · pinch or scroll to zoom</div>
+    <div class="slrow"><span>Floors</span><input type="range" id="hvFl" min="1" max="12" step="1" value="1"><output id="hvFlO">1</output></div>
+    <div id="hvEst"><div class="slrow"><span>Width</span><input type="range" id="hvW" min="4" max="40" step="1" value="10"><output id="hvWO">10 m</output></div>
+    <div class="slrow"><span>Length</span><input type="range" id="hvL" min="4" max="40" step="1" value="8"><output id="hvLO">8 m</output></div></div>
+    <div class="daterow"><button class="chip" id="hvSpin">Auto-turn: on</button><button class="chip" id="hvReset">Reset view</button></div>
   </div>
 </section>
 
@@ -1055,7 +1071,7 @@ $('#compass').onclick=()=>flyTo(V.lat,V.lng,V.z,{bearing:0,tilt:0,duration:650})
 $('#home').onclick=goHome;
 
 /* ---- sheets ---- */
-const sheets={layers:$('#shLayers'),states:$('#shStates'),share:$('#shShare'),export:$('#shExport'),where:$('#shWhere')};
+const sheets={layers:$('#shLayers'),states:$('#shStates'),share:$('#shShare'),export:$('#shExport'),where:$('#shWhere'),house:$('#shHouse')};
 function openSheet(k){
   for(const s in sheets) sheets[s].classList.toggle('open',s===k);
   if(k==='share') onShareOpen(); else onShareClose();
@@ -1441,6 +1457,103 @@ function drawOverlay(){
   if(meas.pts.length) drawMeasure(octx);
   if(tk.on) drawRoute(octx);
 }
+/* ================= HOUSE 3D (pinned building, turn and zoom) ================= */
+const hv={poly:null,floors:1,yaw:35,pitch:55,zoom:1,spin:true,raf:0,tok:0,est:false,pin:[0,0],w:10,l:8,src:''};
+const hvM=(lat0,lng0,lat,lng)=>[(lng-lng0)*111320*Math.cos(lat0*DEG),(lat-lat0)*110574];
+function inPoly(x,y,p){let c=false;for(let i=0,j=p.length-1;i<p.length;j=i++)if((p[i][1]>y)!==(p[j][1]>y)&&x<(p[j][0]-p[i][0])*(y-p[i][1])/(p[j][1]-p[i][1])+p[i][0])c=!c;return c;}
+const hvArea=p=>{let a=0;for(let i=0;i<p.length;i++){const q=p[(i+1)%p.length];a+=p[i][0]*q[1]-q[0]*p[i][1];}return a/2;};
+async function hvFetch(lat,lng){
+  const q=`[out:json][timeout:15];way["building"](around:30,${lat},${lng});out geom tags;`;
+  for(const u of OVP){
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),12000);
+    try{const r=await fetch(u,{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctl.signal});if(!r.ok)throw 0;return (await r.json()).elements||[];}
+    catch(e){}finally{clearTimeout(to);}
+  }
+  return null;
+}
+function hvEstimate(){const a=hv.w/2,b=hv.l/2;hv.poly=[[-a,-b],[a,-b],[a,b],[-a,b]];hv.pin=[0,0];}
+function hvSetFloors(n){hv.floors=clamp(Math.round(n)||1,1,12);$('#hvFl').value=hv.floors;$('#hvFlO').textContent=hv.floors;hvInfoTxt();}
+function hvInfoTxt(){const a=Math.abs(hvArea(hv.poly||[]));$('#hvInfo').textContent=(hv.est?'Estimated box (no map outline here). Adjust the size below.':'Outline from OpenStreetMap')+` · ${Math.round(a)} m² · ${hv.floors} floor${hv.floors>1?'s':''} · drag to turn`;}
+async function openHouse(){
+  if(!state.pin) return;
+  const {lat,lng}=state.pin,tok=++hv.tok;
+  hv.poly=null;hv.yaw=35;hv.pitch=55;hv.zoom=1;
+  openSheet('house');$('#hvInfo').textContent='Looking up the building…';
+  if(!hv.raf) hv.raf=requestAnimationFrame(hvLoop);
+  const els=await hvFetch(lat,lng);
+  if(tok!==hv.tok) return;
+  let best=null,bd=1e9;
+  for(const el of els||[]){
+    if(!el.geometry||el.geometry.length<4) continue;
+    const p=el.geometry.map(g=>hvM(lat,lng,g.lat,g.lon));
+    const d=inPoly(0,0,p)?0:Math.min(...p.map(q=>Math.hypot(q[0],q[1])));
+    if(d<bd){bd=d;best={t:el.tags||{},p};}
+  }
+  if(best&&bd<=25){
+    let p=best.p;if(p.length>3&&p[0][0]===p[p.length-1][0]&&p[0][1]===p[p.length-1][1]) p=p.slice(0,-1);
+    const cx=p.reduce((a,q)=>a+q[0],0)/p.length,cy=p.reduce((a,q)=>a+q[1],0)/p.length;
+    hv.pin=[-cx,-cy];p=p.map(q=>[q[0]-cx,q[1]-cy]);
+    if(hvArea(p)<0) p.reverse();
+    hv.poly=p;hv.est=false;
+    const t=best.t,lv=parseFloat(t['building:levels']),ht=parseFloat(t.height);
+    hvSetFloors(lv||(ht?ht/3:1));
+  }else{hv.est=true;hvEstimate();hvSetFloors(1);}
+  $('#hvEst').style.display=hv.est?'block':'none';hvInfoTxt();
+}
+function hvLoop(){
+  if(!sheets.house.classList.contains('open')){hv.raf=0;return;}
+  if(hv.spin&&hv.poly) hv.yaw=(hv.yaw+0.35)%360;
+  hvDraw();hv.raf=requestAnimationFrame(hvLoop);
+}
+function hvDraw(){
+  const c=$('#hvCv'),g=c.getContext('2d'),dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;
+  if(!w) return;
+  if(c.width!==Math.round(w*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);}
+  g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);
+  const P=hv.poly;if(!P) return;
+  const H=hv.floors*3+0.4;let R=3;for(const q of P)R=Math.max(R,Math.hypot(q[0],q[1]));
+  const s=Math.min(w,h)*0.34/Math.max(R,H*0.7)*hv.zoom;
+  const ya=hv.yaw*DEG,pi=hv.pitch*DEG,cY=Math.cos(ya),sY=Math.sin(ya),cP=Math.cos(pi),sP=Math.sin(pi);
+  const T=(x,y,z)=>{const xr=x*cY-y*sY,yr=x*sY+y*cY;return {x:w/2+xr*s,y:h/2-(yr*sP+(z-H/2)*cP)*s,d:yr*cP-(z-H/2)*sP};};
+  const poly=(pts,fill,stroke)=>{g.beginPath();pts.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();g.fillStyle=fill;g.fill();if(stroke){g.strokeStyle=stroke;g.lineWidth=1;g.stroke();}};
+  const G=R+4;
+  poly([[-G,-G],[G,-G],[G,G],[-G,G]].map(q=>T(q[0],q[1],0)),'#24392d','rgba(255,255,255,.12)');
+  const walls=[];
+  for(let i=0;i<P.length;i++){
+    const a=P[i],b=P[(i+1)%P.length],nx=b[1]-a[1],ny=-(b[0]-a[0]),nl=Math.hypot(nx,ny)||1;
+    if(nx*sY+ny*cY>=0) continue;                       // facing away from camera
+    const sh=0.5+0.5*Math.max(0,(nx*-0.55+ny*-0.8)/nl);
+    const mid=T((a[0]+b[0])/2,(a[1]+b[1])/2,H/2);
+    walls.push({a,b,sh,d:mid.d});
+  }
+  walls.sort((m,n)=>n.d-m.d);
+  for(const k of walls){
+    const v=Math.round(110+120*k.sh);
+    poly([T(k.a[0],k.a[1],0),T(k.b[0],k.b[1],0),T(k.b[0],k.b[1],H),T(k.a[0],k.a[1],H)],`rgb(${v},${Math.round(v*.93)},${Math.round(v*.8)})`,'rgba(0,0,0,.35)');
+    g.strokeStyle='rgba(0,0,0,.22)';
+    for(let f=1;f<hv.floors;f++){const p1=T(k.a[0],k.a[1],f*3),p2=T(k.b[0],k.b[1],f*3);g.beginPath();g.moveTo(p1.x,p1.y);g.lineTo(p2.x,p2.y);g.stroke();}
+  }
+  poly(P.map(q=>T(q[0],q[1],H)),'#a9553a','rgba(0,0,0,.45)');
+  const m=T(hv.pin[0],hv.pin[1],H);g.beginPath();g.arc(m.x,m.y,5,0,7);g.fillStyle='#ffb547';g.fill();g.strokeStyle='#000';g.lineWidth=1.5;g.stroke();
+}
+(()=>{
+  const c=$('#hvCv'),pt=new Map();let pd=0;
+  c.onpointerdown=e=>{c.setPointerCapture(e.pointerId);pt.set(e.pointerId,[e.clientX,e.clientY]);hv.spin=false;$('#hvSpin').textContent='Auto-turn: off';if(pt.size===2){const [a,b]=[...pt.values()];pd=Math.hypot(a[0]-b[0],a[1]-b[1]);}};
+  c.onpointermove=e=>{
+    const o=pt.get(e.pointerId);if(!o) return;
+    if(pt.size===2){pt.set(e.pointerId,[e.clientX,e.clientY]);const [a,b]=[...pt.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pd) hv.zoom=clamp(hv.zoom*d/pd,0.4,4);pd=d;return;}
+    hv.yaw=(hv.yaw+(e.clientX-o[0])*0.6)%360;hv.pitch=clamp(hv.pitch+(e.clientY-o[1])*0.4,10,90);pt.set(e.pointerId,[e.clientX,e.clientY]);
+  };
+  c.onpointerup=c.onpointercancel=e=>{pt.delete(e.pointerId);pd=0;};
+  c.onwheel=e=>{e.preventDefault();hv.zoom=clamp(hv.zoom*(e.deltaY<0?1.1:0.9),0.4,4);};
+  $('#hvFl').oninput=e=>hvSetFloors(e.target.value);
+  $('#hvW').oninput=e=>{hv.w=+e.target.value;$('#hvWO').textContent=hv.w+' m';if(hv.est){hvEstimate();hvInfoTxt();}};
+  $('#hvL').oninput=e=>{hv.l=+e.target.value;$('#hvLO').textContent=hv.l+' m';if(hv.est){hvEstimate();hvInfoTxt();}};
+  $('#hvSpin').onclick=()=>{hv.spin=!hv.spin;$('#hvSpin').textContent='Auto-turn: '+(hv.spin?'on':'off');};
+  $('#hvReset').onclick=()=>{hv.yaw=35;hv.pitch=55;hv.zoom=1;};
+  $('#pcHouse').onclick=openHouse;
+})();
+
 /* ================= ENHANCE (live sharpen / contrast, like a photo editor) ================= */
 function setEnhance(v){
   v=clamp(+v||0,0,100);
