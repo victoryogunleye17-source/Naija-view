@@ -1,8 +1,8 @@
 // NaijaView service worker: offline app shell + cached map tiles
-const VER = 'v1';
-const SHELL = 'nv-shell-' + VER, TILES = 'nv-tiles-' + VER, MAX_TILES = 600;
+const VER = 'v4';
+const SHELL = 'nv-shell-' + VER, TILES = 'nv-tiles-' + VER, MAX_TILES = 2500;
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
-const TILE_HOSTS = /(arcgisonline\.com|cartocdn\.com|gibs\.earthdata\.nasa\.gov)$/;
+const TILE_HOSTS = /(arcgisonline\.com|arcgis\.com|cartocdn\.com|gibs\.earthdata\.nasa\.gov)$/;
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {

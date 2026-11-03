@@ -444,6 +444,7 @@ const TEST=/[?&]test=1/.test(location.search);   // synthetic tiles, for offline
 const $=(s,el=document)=>el.querySelector(s);
 const $$=(s,el=document)=>[...el.querySelectorAll(s)];
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const maxZ=()=>Math.min(MAX_Z,(BASES[state.base]?BASES[state.base].maxN:MAX_Z)+1.5);   // no point zooming far past real imagery
 const store={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const utcDate=o=>new Date(Date.now()+o*864e5).toISOString().slice(0,10);
 
@@ -468,13 +469,14 @@ const STATES=[
 /* ================= LAYERS ================= */
 const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/';
 const GIBS='https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
-const state={base:'sat',overlays:{labels:true,roads:false,fires:false,dust:false},date:utcDate(-1),pin:null,src:'gps',prevBase:null,prevAt:0};
+const state={base:'sat',overlays:{labels:true,roads:false,buildings:false,fires:false,dust:false},date:utcDate(-1),pin:null,src:'gps',prevBase:null,prevAt:0};
 
 const esri=(id,name,svc,maxN,x={})=>({id,name,maxN,detect:true,attr:'Esri, Maxar, Earthstar Geographics',url:(z,X,Y)=>`${ESRI}${svc}/MapServer/tile/${z}/${Y}/${X}`,...x});
 const gibs=(id,name,layer,tms,ext,maxN,dated,x={})=>({id,name,maxN,dated,attr:'NASA EOSDIS GIBS',url:(z,X,Y)=>`${GIBS}${layer}/default/${dated?state.date:'2016-01-01'}/${tms}/${z}/${Y}/${X}.${ext}`,...x});
 
 const BASES={
   sat:   esri('sat','Satellite HD','World_Imagery',19,{sub:'Sharpest imagery, sub-metre in cities',sw:'linear-gradient(120deg,#25432a,#5d7236 45%,#8a7a52 75%,#3b5560)'}),
+  clarity:{id:'clarity',name:'Satellite Clarity',maxN:19,detect:true,attr:'Esri, Maxar, Earthstar Geographics',sub:'Esri Clarity: often sharper in cities',sw:'linear-gradient(120deg,#1f4a2e,#6b8a3c 45%,#a08d5e 75%,#2f5a6a)',url:(z,X,Y)=>`https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${Y}/${X}`},
   live:  gibs('live','Live · NASA','VIIRS_SNPP_CorrectedReflectance_TrueColor','GoogleMapsCompatible_Level9','jpg',9,true,{sub:"Real satellite pass, refreshed daily (~250 m)",sw:'radial-gradient(circle at 30% 40%,#fff 0 18%,transparent 19%),radial-gradient(circle at 70% 60%,#e9f2f8 0 16%,transparent 17%),linear-gradient(120deg,#2a5d8f,#4d7f3c 60%,#b9a463)'}),
   street:esri('street','Street','World_Street_Map',19,{sub:'Roads, towns, landmarks',sw:'repeating-linear-gradient(35deg,#f4efe4 0 12px,#fff 12px 14px,#e2dccb 14px 26px)'}),
   topo:  esri('topo','Terrain','World_Topo_Map',19,{sub:'Elevation, rivers, relief',sw:'linear-gradient(120deg,#cfe2c0,#e8e1bd 50%,#b8cfae)'}),
@@ -485,6 +487,7 @@ const BASES={
 const OVERLAYS={
   labels:esri('labels','Place names','Reference/World_Boundaries_and_Places',19,{detect:false,sub:'Towns, states, borders'}),
   roads: esri('roads','Roads','Reference/World_Transportation',19,{detect:false,sub:'Highways and streets over imagery'}),
+  buildings:{id:'buildings',name:'Buildings',vector:true,attr:'Buildings © OpenStreetMap contributors',sub:'Outlines coloured by type · zoom in to street level'},
   fires: gibs('fires','Fire hotspots','VIIRS_SNPP_Thermal_Anomalies_375m_All','GoogleMapsCompatible_Level9','png',9,true,{sub:'Live · thermal detections, daily'}),
   dust:  gibs('dust','Haze & dust','MODIS_Terra_Aerosol','GoogleMapsCompatible_Level6','png',6,true,{op:.8,sub:'Live · harmattan dust & smoke, daily'})
 };
@@ -582,7 +585,7 @@ function panTo(anchor,sx,sy){          // keep geo `anchor` under screen point
   dragContent(cp.x-gp.x,cp.y-gp.y);
 }
 function zoomAt(sx,sy,nz){
-  nz=clamp(nz,MIN_Z,MAX_Z);
+  nz=clamp(nz,MIN_Z,maxZ());
   const cp=screenToCanvas(sx,sy), g=canvasToGeo(cp.x,cp.y);
   V.z=nz;
   const gp=geoToCanvas(g.lat,g.lng);
@@ -594,7 +597,7 @@ const mPerPx=(lat,z)=>156543.03392*Math.cos(lat*DEG)/Math.pow(2,z);
 
 /* ================= TILE ENGINE ================= */
 const cache=new Map(), pending=[]; let inflight=0, okCount=0, errCount=0, bannerShown=false;
-const MAXF=22; const corsBroken={};
+const MAXF=28; const corsBroken={};
 const probe=document.createElement('canvas'); probe.width=probe.height=16;
 const pctx=probe.getContext('2d',{willReadFrequently:true});
 
@@ -659,9 +662,90 @@ function pump(){
   }
 }
 function evict(){
-  if(cache.size<=800) return;
+  if(cache.size<=2400) return;
   const arr=[...cache.values()].filter(t=>t.state!=='loading'&&t.used<frameNo-40).sort((a,b)=>a.used-b.used);
-  for(let i=0;i<arr.length&&cache.size>600;i++) cache.delete(arr[i].key);
+  for(let i=0;i<arr.length&&cache.size>1800;i++) cache.delete(arr[i].key);
+}
+
+
+/* ================= BUILDINGS (OpenStreetMap via Overpass) ================= */
+const BZ=16, bCache=new Map(), bQueue=[]; let bBusy=0, bCheck=false;
+const OVP=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+const B_TYPES=[
+  ['#b57cff',/^(church|cathedral|chapel|mosque|temple|shrine|religious)$/],
+  ['#4da3ff',/^(school|university|college|kindergarten)$/],
+  ['#ff5a5a',/^(hospital|clinic)$/],
+  ['#ffa53d',/^(commercial|retail|industrial|warehouse|office|supermarket|hotel|service)$/],
+  ['#ffe066',/^(house|residential|detached|apartments|bungalow|terrace|dormitory|hut|semidetached_house)$/]
+];
+const bColor=t=>{for(const [c,r] of B_TYPES) if(r.test(t)) return c; return '#7ee0c0';};
+function bBox(x,y){
+  const n=Math.pow(2,BZ), lng=v=>v/n*360-180, lat=v=>Math.atan(Math.sinh(Math.PI*(1-2*v/n)))/DEG;
+  return {w:lng(x),e:lng(x+1),n:lat(y),s:lat(y+1)};
+}
+function bTile(x,y){
+  const key=x+'|'+y; let t=bCache.get(key);
+  if(!t){t={key,x,y,state:'new',groups:null,count:0,used:frameNo,tries:0,errAt:0,...bBox(x,y)};bCache.set(key,t);bQueue.push(t);}
+  else if(t.state==='err'&&t.tries<3&&performance.now()-t.errAt>12000){t.state='new';bQueue.push(t);}
+  t.used=frameNo;return t;
+}
+async function bLoad(t){
+  bBusy++;t.state='loading';t.tries++;
+  const q=`[out:json][timeout:25];way["building"](${t.s.toFixed(6)},${t.w.toFixed(6)},${t.n.toFixed(6)},${t.e.toFixed(6)});out geom tags;`;
+  for(let i=0;i<OVP.length&&t.state!=='ok';i++){
+    try{
+      const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),30000);
+      const r=await fetch(OVP[(i+t.tries-1)%OVP.length],{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctl.signal});
+      clearTimeout(to);
+      if(!r.ok) throw new Error(r.status);
+      const j=await r.json(), groups={}; let n=0;
+      for(const el of (j.elements||[])){
+        if(!el.geometry||el.geometry.length<3||n>=5000) continue;
+        const tg=el.tags||{}, kind=tg.building&&tg.building!=='yes'?tg.building:(tg.amenity||tg.shop||tg.building||'yes');
+        const c=bColor(kind), a=groups[c]||(groups[c]=[]);
+        const pts=new Float64Array(el.geometry.length*2);
+        el.geometry.forEach((g,k)=>{const p=project(g.lat,g.lon,0);pts[2*k]=p.x;pts[2*k+1]=p.y;});
+        a.push(pts);n++;
+      }
+      t.groups=groups;t.count=n;t.state='ok';
+    }catch(e){}
+  }
+  if(t.state!=='ok'){t.state='err';t.errAt=performance.now();}
+  bBusy--;bCheck=true;dirty=true;bPump();
+}
+function bPump(){
+  while(bBusy<2&&bQueue.length){
+    const t=bQueue.shift();
+    if(t.state!=='new') continue;
+    if(t.used<frameNo-30){bCache.delete(t.key);continue;}
+    bLoad(t);
+  }
+}
+function drawBuildings(){
+  if(V.z<BZ-0.2) return;
+  const k=Math.pow(2,V.z), C0=project(V.lat,V.lng,0), n=Math.pow(2,BZ), f=n/TILE;
+  const wx0=C0.x+VB.u0/k, wx1=C0.x+VB.u1/k, wy0=C0.y+VB.v0/k, wy1=C0.y+VB.v1/k;
+  const tx0=Math.floor(wx0*f), tx1=Math.floor(wx1*f), ty0=Math.max(0,Math.floor(wy0*f)), ty1=Math.min(n-1,Math.floor(wy1*f));
+  if((tx1-tx0+1)*(ty1-ty0+1)>20) return;                       // too zoomed out / too many tiles
+  const ox=C0.x*k, oy=C0.y*k; let total=0, allOk=true;
+  ctx.lineJoin='round';ctx.lineWidth=1.4;
+  for(let ty=ty0;ty<=ty1;ty++) for(let tx=tx0;tx<=tx1;tx++){
+    const t=bTile(((tx%n)+n)%n,ty);
+    if(t.state!=='ok'){allOk=false;continue;}
+    total+=t.count;
+    for(const col in t.groups){
+      ctx.beginPath();
+      for(const pts of t.groups[col]){
+        ctx.moveTo(pts[0]*k-ox,pts[1]*k-oy);
+        for(let i=2;i<pts.length;i+=2) ctx.lineTo(pts[i]*k-ox,pts[i+1]*k-oy);
+        ctx.closePath();
+      }
+      ctx.fillStyle=col+'55';ctx.fill();
+      ctx.strokeStyle=col;ctx.stroke();
+    }
+  }
+  bPump();
+  if(bCheck&&bBusy===0&&!bQueue.length){bCheck=false;if(allOk&&total===0) toast('No buildings are mapped here yet. OpenStreetMap coverage varies.');}
 }
 
 /* ---- drawing ---- */
@@ -678,7 +762,7 @@ function blit(img,ox,oy,sz,fx,fy,fw,fh){
   ctx.drawImage(img,sx0*iw,sy0*ih,(sx1-sx0)*iw,(sy1-sy0)*ih,dx0,dy0,dx1-dx0+(sz>1200?0:0.5),dy1-dy0+(sz>1200?0:0.5));
 }
 function drawLayer(L,alpha,now){
-  const tz=clamp(Math.floor(V.z+0.35),0,L.maxN), s=Math.pow(2,V.z-tz), sz=TILE*s;
+  const boost=L.nosharp?0:Math.round(Math.log2(Math.max(1,dprE))), tz=clamp(Math.floor(V.z+0.35)+boost,0,L.maxN), s=Math.pow(2,V.z-tz), sz=TILE*s;   // retina: fetch 1 level deeper on dpr-2 screens
   const n=Math.pow(2,tz), C=project(V.lat,V.lng,tz);
   const b=V.bearing*DEG,c=Math.cos(b),sn=Math.sin(b);
   const R=Math.hypot(Math.max(PCX,CW-PCX),Math.max(PCY,CH-PCY))/s;
@@ -736,7 +820,8 @@ function render(now){
   const miss=drawLayer(BASES[state.base],1,now);
   if(state.prevBase&&(miss===0||now-state.prevAt>3500)&&!fading) state.prevBase=null;
   else if(state.prevBase) fading=true;
-  for(const k in OVERLAYS) if(state.overlays[k]) drawLayer(OVERLAYS[k],OVERLAYS[k].op||1,now);
+  for(const k in OVERLAYS) if(state.overlays[k]&&!OVERLAYS[k].vector) drawLayer(OVERLAYS[k],OVERLAYS[k].op||1,now);
+  if(state.overlays.buildings) drawBuildings();
 
   // GPS accuracy ring (flat on the ground)
   if(gps.fix){
@@ -792,7 +877,7 @@ function updateMarkers(){
 let flyA=null,fling=null,zoomT=null;
 function cancelAnims(){flyA=null;fling=null;zoomT=null;}
 function flyTo(lat,lng,z,o={}){
-  z=clamp(z,MIN_Z,MAX_Z);
+  z=clamp(z,MIN_Z,maxZ());
   const a=project(V.lat,V.lng,0),b=project(lat,lng,0);
   const dist=Math.hypot(b.x-a.x,b.y-a.y)*Math.pow(2,Math.min(V.z,z));
   const dip=clamp(Math.log2(Math.max(1,dist/(Math.min(W,H)*0.9))),0,4.5);
@@ -885,7 +970,7 @@ stage.addEventListener('pointermove',e=>{
     }
   }else if(ptrs.size===2&&g2){
     const [p,q]=[...ptrs.values()],mx=(p.x+q.x)/2,my=(p.y+q.y)/2;
-    V.z=clamp(g2.z0+Math.log2((Math.hypot(p.x-q.x,p.y-q.y)||1)/g2.d0),MIN_Z,MAX_Z);
+    V.z=clamp(g2.z0+Math.log2((Math.hypot(p.x-q.x,p.y-q.y)||1)/g2.d0),MIN_Z,maxZ());
     V.bearing=((g2.b0+(Math.atan2(q.y-p.y,q.x-p.x)/DEG-g2.a0)+540)%360)-180;
     panTo(g2.anchor,mx,my);dirty=true;
   }
@@ -927,7 +1012,7 @@ stage.addEventListener('wheel',e=>{
   e.preventDefault();flyA=null;fling=null;
   let dy=e.deltaY;if(e.deltaMode===1)dy*=16;else if(e.deltaMode===2)dy*=400;
   const k=e.ctrlKey?0.012:0.0042;
-  zoomT={x:e.clientX,y:e.clientY,z:clamp((zoomT?zoomT.z:V.z)-dy*k,MIN_Z,MAX_Z)};
+  zoomT={x:e.clientX,y:e.clientY,z:clamp((zoomT?zoomT.z:V.z)-dy*k,MIN_Z,maxZ())};
 },{passive:false});
 window.addEventListener('keydown',e=>{
   if(/INPUT|TEXTAREA/.test((document.activeElement||{}).tagName||'')){ if(e.key==='Escape')document.activeElement.blur(); return; }
@@ -983,7 +1068,7 @@ function buildLayerUI(){
     b.className='tg'+(state.overlays[id]?' on':'');b.dataset.id=id;
     b.innerHTML='<div><span class="n"></span><small></small></div><div class="sw2"></div>';
     $('.n',b).textContent=L.name;$('small',b).textContent=L.sub;
-    b.onclick=()=>{state.overlays[id]=!state.overlays[id];buildLayerUI();dirty=true;};
+    b.onclick=()=>{state.overlays[id]=!state.overlays[id];buildLayerUI();dirty=true;if(id==='buildings'&&state.overlays[id]){bCheck=true;toast(V.z<BZ?'Zoom in to street level to see buildings':'Loading buildings…');}};
     o.appendChild(b);
   }
   const liveOn=state.base==='live'||state.overlays.fires||state.overlays.dust;
@@ -993,7 +1078,7 @@ function buildLayerUI(){
 function setBase(id){
   if(state.base===id) return;
   state.prevBase=BASES[state.base];state.prevAt=performance.now();
-  state.base=id;buildLayerUI();dirty=true;
+  state.base=id;V.z=Math.min(V.z,maxZ());buildLayerUI();dirty=true;
   if(id==='live'&&V.z>10) toast('Live imagery resolves to ~250 m. Switch to Satellite HD for close-ups.');
 }
 function setDate(d){state.date=d;buildLayerUI();dirty=true;}
