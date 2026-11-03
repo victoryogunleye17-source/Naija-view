@@ -234,6 +234,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
 </head>
 <body>
 <div id="stage">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="nvSharp" color-interpolation-filters="sRGB"><feConvolveMatrix id="nvK" order="3" kernelMatrix="0 0 0 0 1 0 0 0 0" preserveAlpha="true"/></filter></svg>
   <canvas id="map"></canvas>
   <div id="haze"></div>
   <canvas id="ov"></canvas>
@@ -328,6 +329,9 @@ input[type=range]{flex:1;accent-color:var(--green);height:28px}
       <input type="date" id="liveDate">
       <button class="chip" id="dToday">Today</button><button class="chip" id="dYest">Yesterday</button>
     </div>
+    <h3>Enhance imagery</h3>
+    <div class="slrow"><span>Clarity</span><input type="range" id="slEnh" min="0" max="100" step="1" value="0"><output id="ouEnh">Off</output></div>
+    <div class="daterow"><button class="chip" id="enhOff">Off</button><button class="chip" id="enhAuto">Auto (recommended)</button><button class="chip" id="enhMax">Max</button></div>
     <h3>Angle</h3>
     <div class="slrow"><span>Rotate</span><input type="range" id="slRot" min="-180" max="180" step="1" value="0"><output id="ouRot">0°</output></div>
     <div class="slrow"><span>Tilt</span><input type="range" id="slTilt" min="0" max="50" step="1" value="0"><output id="ouTilt">0°</output></div>
@@ -1437,6 +1441,18 @@ function drawOverlay(){
   if(meas.pts.length) drawMeasure(octx);
   if(tk.on) drawRoute(octx);
 }
+/* ================= ENHANCE (live sharpen / contrast, like a photo editor) ================= */
+function setEnhance(v){
+  v=clamp(+v||0,0,100);
+  const a=v/100*0.9,k=$('#nvK');
+  if(k) k.setAttribute('kernelMatrix',`0 ${-a} 0 ${-a} ${1+4*a} ${-a} 0 ${-a} 0`);
+  canvas.style.filter=v?`url(#nvSharp) contrast(${(1+v/100*0.22).toFixed(3)}) saturate(${(1+v/100*0.25).toFixed(3)}) brightness(${(1+v/100*0.04).toFixed(3)})`:'';
+  $('#slEnh').value=v;$('#ouEnh').textContent=v?v+'%':'Off';
+  try{localStorage.setItem('nvEnh',v);}catch(e){}
+}
+$('#slEnh').oninput=e=>setEnhance(e.target.value);
+$('#enhOff').onclick=()=>setEnhance(0);$('#enhAuto').onclick=()=>setEnhance(55);$('#enhMax').onclick=()=>setEnhance(100);
+try{setEnhance(localStorage.getItem('nvEnh')||0);}catch(e){}
 /* ================= TRACK (route to pin / shared location) ================= */
 const tk={on:false,mode:'car',line:null,dist:0,dur:0,last:null,busy:false,t:0,fitted:false,arrived:false};
 const TK_SPEED={car:40,bike:15,walk:5};                       // km/h, used when the route service is unreachable
